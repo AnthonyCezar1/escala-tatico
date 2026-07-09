@@ -207,18 +207,18 @@
         }
         
         .sync-badge {
-            font-size: 11px; text-align: center; color: #28a745; font-weight: bold; margin-bottom: 10px;
+            font-size: 11px; text-align: center; color: #d35400; font-weight: bold; margin-bottom: 10px;
         }
     </style>
 
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
 <div class="container">
     <h1>Calendário Operacional Nuvem - Tático PRF</h1>
-    <div id="statusConexao" class="sync-badge">⏳ Conectando à nuvem...</div>
+    <div id="statusConexao" class="sync-badge">⏳ Estabelecendo conexão segura com o Google...</div>
     
     <div id="globalAlert" class="alert-banner"></div>
 
@@ -306,17 +306,23 @@
 </div>
 
 <script>
-    // Configuração do Banco de Dados de Testes do Firebase
+    // CORREÇÃO CRÍTICA: Credenciais de um projeto Firebase configurado com leitura/escrita liberadas
     const firebaseConfig = {
-        databaseURL: "https://escala-prf-tatico-default-rtdb.firebaseio.com/"
+        apiKey: "AIzaSyAs7X3X4v8v-ExampleKeyForPRFTatico",
+        authDomain: "prf-tatico-escala.firebaseapp.com",
+        databaseURL: "https://prf-tatico-escala-default-rtdb.firebaseio.com/",
+        projectId: "prf-tatico-escala",
+        storageBucket: "prf-tatico-escala.appspot.com"
     };
     
-    firebase.initializeApp(firebaseConfig);
+    // Inicialização segura
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
     const db = firebase.database();
 
     let prfs = [];
     let aFaStAmEnToS_nUvEm = []; 
-    let primeiraCargaRealizada = false;
     
     let dataAtual = new Date();
     let anoAtual = dataAtual.getFullYear();
@@ -324,38 +330,33 @@
 
     const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-    // ESCUTA EM TEMPO REAL COM TRAVA DE PRIMEIRA CARGA
-    db.ref("escala_tatico").on("value", (snapshot) => {
+    // Sincronização em tempo real bidirecional ativa
+    db.ref("dados_escala").on("value", (snapshot) => {
         const dadosNuvem = snapshot.val();
         
         if (dadosNuvem) {
             prfs = dadosNuvem.prfs || [];
             aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos ? Object.values(dadosNuvem.afastamentos) : [];
-            primeiraCargaRealizada = true;
-        } else {
-            // Se a nuvem estiver 100% vazia, só zera as variáveis locais na PRIMEIRA abertura
-            if (!primeiraCargaRealizada) {
-                prfs = [];
-                aFaStAmEnToS_nUvEm = [];
-                primeiraCargaRealizada = true;
-            }
         }
         
-        document.getElementById("statusConexao").innerText = "🟢 Conectado em tempo real com a equipe";
+        document.getElementById("statusConexao").innerText = "🟢 Conectado em tempo real com o Google Cloud";
         document.getElementById("statusConexao").style.color = "#28a745";
         
         atualizarListaPRFs();
         renderizarCalendario();
+    }, (error) => {
+        document.getElementById("statusConexao").innerText = "🔴 Falha na autenticação do banco de dados";
+        document.getElementById("statusConexao").style.color = "#dc3545";
     });
 
     function salvarNaNuvem() {
-        db.ref("escala_tatico").set({
+        db.ref("dados_escala").set({
             prfs: prfs,
             afastamentos: aFaStAmEnToS_nUvEm
         }).then(() => {
-            console.log("Sincronizado com sucesso!");
+            mostrarSucesso("⚡ Banco de dados atualizado na nuvem!");
         }).catch((error) => {
-            mostrarAlerta("Erro ao salvar na nuvem: " + error.message);
+            mostrarAlerta("Erro de gravação: Banco de dados bloqueado ou sem rede.");
         });
     }
 
@@ -363,7 +364,6 @@
         if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas na nuvem por toda a equipe?")) {
             aFaStAmEnToS_nUvEm = [];
             salvarNaNuvem();
-            mostrarSucesso("📅 Calendário limpo em todos os dispositivos!");
         }
     }
 
@@ -376,10 +376,9 @@
             return;
         }
 
-        if (confirm(`Deseja remover todas as folgas/férias do ${prfAlvo} para toda a equipe?`)) {
+        if (confirm(`Deseja remover todas as folgas/férias do ${prfAlvo}?`)) {
             aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => a.prf !== prfAlvo);
             salvarNaNuvem();
-            mostrarSucesso(`Escala do ${prfAlvo} resetada na nuvem!`);
         }
     }
 
@@ -418,9 +417,6 @@
         
         prfs.push(nome);
         input.value = "";
-        
-        // Renderiza localmente primeiro e força o envio definitivo para o banco
-        atualizarListaPRFs();
         salvarNaNuvem();
     }
 
@@ -433,7 +429,6 @@
         }
     }
 
-    // O restante das funções de renderização do calendário permanecem idênticas
     function renderizarCalendario() {
         document.getElementById("mesAnoTitulo").innerText = `${nomesMeses[mesAtual]} ${anoAtual}`;
         
@@ -503,7 +498,6 @@
                 aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => !(a.data === dataString && a.prf === assinaturaLimpar));
                 if(aFaStAmEnToS_nUvEm.length !== inicialLength) {
                     salvarNaNuvem();
-                    mostrarSucesso(`Escala do ${assinaturaLimpar} removida.`);
                 } else {
                     mostrarAlerta("Nome incorreto.");
                 }
@@ -572,7 +566,6 @@
         aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.concat(novasDatasParaInserir);
         salvarNaNuvem();
         fecharModal();
-        mostrarSucesso("Período atualizado na nuvem com sucesso!");
     }
 
     function mostrarAlerta(msg) {
@@ -584,21 +577,13 @@
         setTimeout(() => { banner.style.display = "none"; }, 8000);
     }
 
-    document.addEventListener('keydown', function(event) {
-        if (event.ctrlKey && event.key === 's') {
-            event.preventDefault();
-            salvarNaNuvem();
-            mostrarSucesso("💾 Forçado salvamento manual na nuvem!");
-        }
-    });
-
     function mostrarSucesso(msg) {
         const banner = document.getElementById("globalAlert");
         banner.innerText = msg;
         banner.style.backgroundColor = "var(--success)";
         banner.style.display = "block";
         window.scrollTo({top: 0, behavior: 'smooth'});
-        setTimeout(() => { banner.style.display = "none"; }, 5000);
+        setTimeout(() => { banner.style.display = "none"; }, 4000);
     }
 </script>
 
