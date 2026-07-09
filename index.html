@@ -1,8 +1,14 @@
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calendário Tático - PRF</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#002244">
+
     <style>
         :root {
             --prf-blue: #002244;
@@ -85,8 +91,8 @@
         button.btn-danger { background-color: var(--danger); }
         button.btn-danger:hover { background-color: #bd2130; }
         
-        button.btn-warning { background-color: #ffc107; color: #212529; }
-        button.btn-warning:hover { background-color: #e0a800; }
+        button.btn-warning { background-color: #e67e22; color: white; }
+        button.btn-warning:hover { background-color: #d35400; }
 
         .chip-list {
             list-style: none;
@@ -111,7 +117,6 @@
             font-size: 11px;
         }
 
-        /* Estilos do Calendário */
         .calendar-header {
             display: flex;
             justify-content: space-between;
@@ -177,7 +182,6 @@
         .badge-folga { background-color: #fd7e14; }
         .badge-ferias { background-color: #6f42c1; }
 
-        /* Modal Interno */
         .modal {
             display: none;
             position: fixed;
@@ -201,12 +205,20 @@
             font-size: 13px; text-align: center; display: none;
             line-height: 1.4;
         }
+        
+        .sync-badge {
+            font-size: 11px; text-align: center; color: #28a745; font-weight: bold; margin-bottom: 10px;
+        }
     </style>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body>
 
 <div class="container">
-    <h1>Calendário Operacional - Grupo Tático</h1>
+    <h1>Calendário Operacional Nuvem - Tático PRF</h1>
+    <div class="sync-badge">🟢 Conectado em tempo real com a equipe</div>
     
     <div id="globalAlert" class="alert-banner"></div>
 
@@ -222,8 +234,8 @@
                 <ul id="listaPRFs" class="chip-list"></ul>
                 
                 <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 8px;">
-                    <button class="btn-warning" style="background-color: #e67e22; color: white;" onclick="resetarPRFEsquecido()">🧹 Limpar Escala de 1 PRF</button>
-                    <button class="btn-warning" onclick="resetarCalendarioApenas()">🔄 Limpar Todo o Calendário</button>
+                    <button class="btn-warning" onclick="resetarPRFEsquecido()">🧹 Limpar Escala de 1 PRF</button>
+                    <button class="btn-warning" style="background-color: #dc3545;" onclick="resetarCalendarioApenas()">🔄 Limpar Todo o Calendário</button>
                 </div>
             </div>
 
@@ -283,7 +295,7 @@
         <div class="input-group" style="background: #edf2f7; padding: 10px; border-radius: 4px;">
             <label for="confirmacaoAssinatura" style="color: var(--prf-blue);">Assinatura de Validação:</label>
             <input type="text" id="confirmacaoAssinatura" placeholder="Digite seu nome exatamente igual ao selecionado">
-            <small style="color: #555; font-size: 11px; display:block; margin-top:4px;">Segurança: Você só pode alterar o seu próprio calendário.</small>
+            <small style="color: #555; font-size: 11px; display:block; margin-top:4px;">Segurança: Você só altera a sua própria escala.</small>
         </div>
 
         <div class="modal-buttons">
@@ -294,10 +306,18 @@
 </div>
 
 <script>
-    const prfsPadrao = ["PRF Aldo", "PRF Batista", "PRF Carlos", "PRF Dias", "PRF Eduardo", "PRF Fernando"];
+    // Configuração do Banco de Dados de Testes do Firebase
+    const firebaseConfig = {
+        databaseURL: "https://escala-prf-tatico-default-rtdb.firebaseio.com/"
+    };
     
-    let prfs = JSON.parse(localStorage.getItem('prfs_tatico')) || [...prfsPadrao];
-    let afastamentos = JSON.parse(localStorage.getItem('afastamentos_tatico')) || [];
+    // Inicializa o Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // Estado Local do Aplicativo (Sincronizado com a nuvem)
+    let prfs = ["PRF Aldo", "PRF Batista", "PRF Carlos", "PRF Dias", "PRF Eduardo", "PRF Fernando"];
+    let aFaStAmEnToS_nUvEm = []; 
     
     let dataAtual = new Date();
     let anoAtual = dataAtual.getFullYear();
@@ -305,41 +325,49 @@
 
     const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-    window.onload = function() {
+    // ESCUTA EM TEMPO REAL: Toda vez que alguém mexer na nuvem, essa função roda sozinha em todos os celulares
+    db.ref("escala_tatico").on("value", (snapshot) => {
+        const dadosNuvem = snapshot.val();
+        if (dadosNuvem) {
+            prfs = dadosNuvem.prfs || ["PRF Aldo", "PRF Batista", "PRF Carlos", "PRF Dias", "PRF Eduardo", "PRF Fernando"];
+            // Converte o objeto do Firebase de volta para array
+            aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos ? Object.values(dadosNuvem.afastamentos) : [];
+        } else {
+            prfs = ["PRF Aldo", "PRF Batista", "PRF Carlos", "PRF Dias", "PRF Eduardo", "PRF Fernando"];
+            aFaStAmEnToS_nUvEm = [];
+        }
         atualizarListaPRFs();
         renderizarCalendario();
-    };
+    });
 
-    function salvarNoLocalStorage() {
-        localStorage.setItem('prfs_tatico', JSON.stringify(prfs));
-        localStorage.setItem('afastamentos_tatico', JSON.stringify(afastamentos));
+    function salvarNaNuvem() {
+        db.ref("escala_tatico").set({
+            prfs: prfs,
+            afastamentos: aFaStAmEnToS_nUvEm
+        });
     }
 
-    // AJUSTE 1: RESET APENAS DO CALENDÁRIO (MANTÉM OS COLEGAS)
     function resetarCalendarioApenas() {
-        if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas no calendário? Os nomes dos policiais cadastrados serão mantidos.")) {
-            afastamentos = [];
-            salvarNoLocalStorage();
-            renderizarCalendario();
-            mostrarSucesso("📅 Calendário de afastamentos totalmente limpo!");
+        if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas na nuvem por toda a equipe?")) {
+            aFaStAmEnToS_nUvEm = [];
+            salvarNaNuvem();
+            mostrarSucesso("📅 Calendário limpo em todos os dispositivos!");
         }
     }
 
-    // AJUSTE 2: APAGAR APENAS AS DATAS DE UM POLICIAL ESPECÍFICO
     function resetarPRFEsquecido() {
-        const prfAlvo = prompt("Digite o nome EXATO do PRF que deseja limpar da escala:");
+        const prfAlvo = prompt("Digite o nome EXATO do PRF que deseja limpar da escala na nuvem:");
         if (!prfAlvo) return;
 
         if (!prfs.includes(prfAlvo)) {
-            mostrarAlerta("Policial não encontrado na lista atual do grupo.");
+            mostrarAlerta("Policial não encontrado na lista.");
             return;
         }
 
-        if (confirm(`Deseja remover todos os lançamentos de folgas e férias do ${prfAlvo}?`)) {
-            afastamentos = afastamentos.filter(a => a.prf !== prfAlvo);
-            salvarNoLocalStorage();
-            renderizarCalendario();
-            mostrarSucesso(`🧹 Escala do ${prfAlvo} limpa com sucesso!`);
+        if (confirm(`Deseja remover todas as folgas/férias do ${prfAlvo} para toda a equipe?`)) {
+            aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => a.prf !== prfAlvo);
+            salvarNaNuvem();
+            mostrarSucesso(`Escala do ${prfAlvo} resetada na nuvem!`);
         }
     }
 
@@ -367,25 +395,21 @@
         
         if (!nome) return;
         if (prfs.length >= 6) {
-            mostrarAlerta("Limite máximo de 6 servidores atingido para este grupo.");
+            mostrarAlerta("Limite máximo de 6 servidores atingido.");
             return;
         }
         
         prfs.push(nome);
         input.value = "";
-        atualizarListaPRFs();
-        salvarNoLocalStorage();
-        renderizarCalendario();
+        salvarNaNuvem();
     }
 
     function removerPRF(index) {
         const nomeRemovido = prfs[index];
-        if(confirm(`Deseja remover o ${nomeRemovido} do grupo e apagar suas escalas?`)) {
+        if(confirm(`Remover ${nomeRemovido} e suas escalas de todos os celulares?`)) {
             prfs.splice(index, 1);
-            afastamentos = afastamentos.filter(a => a.prf !== nomeRemovido);
-            atualizarListaPRFs();
-            salvarNoLocalStorage();
-            renderizarCalendario();
+            aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => a.prf !== nomeRemovido);
+            salvarNaNuvem();
         }
     }
 
@@ -421,7 +445,7 @@
             const eventsDiv = document.createElement("div");
             eventsDiv.className = "events-container";
 
-            const listAfastados = afastamentos.filter(a => a.data === dataString);
+            const listAfastados = aFaStAmEnToS_nUvEm.filter(a => a.data === dataString);
             listAfastados.forEach(afast => {
                 const badge = document.createElement("div");
                 badge.className = `event-badge badge-${afast.tipo}`;
@@ -448,21 +472,19 @@
         document.getElementById("inputDias").value = "1";
         document.getElementById("confirmacaoAssinatura").value = "";
         
-        const doDia = afastamentos.filter(a => a.data === dataString);
+        const doDia = aFaStAmEnToS_nUvEm.filter(a => a.data === dataString);
         if(doDia.length > 0) {
             const nomesAfastados = doDia.map(a => a.prf).join(", ");
-            const assinaturaLimpar = prompt(`Afastados neste dia: ${nomesAfastados}.\nPara limpar os afastamentos deste dia, digite o nome do PRF cuja escala será removida:`);
+            const assinaturaLimpar = prompt(`Afastados neste dia: ${nomesAfastados}.\nPara limpar, digite o nome do PRF cuja escala será removida:`);
             
             if(assinaturaLimpar) {
-                const inicialLength = afastamentos.length;
-                afastamentos = afastamentos.filter(a => !(a.data === dataString && a.prf === assinaturaLimpar));
-                if(afastamentos.length !== inicialLength) {
-                    salvarNoLocalStorage();
-                    renderizarCalendario();
-                    mostrarSucesso(`Escala do ${assinaturaLimpar} removida para este dia.`);
+                const inicialLength = aFaStAmEnToS_nUvEm.length;
+                aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => !(a.data === dataString && a.prf === assinaturaLimpar));
+                if(aFaStAmEnToS_nUvEm.length !== inicialLength) {
+                    salvarNaNuvem();
+                    mostrarSucesso(`Escala do ${assinaturaLimpar} removida.`);
                 } else {
-                    title="Alerta";
-                    mostrarAlerta("Nome digitado não possuía afastamento nesta data.");
+                    mostrarAlerta("Nome incorreto.");
                 }
                 return;
             }
@@ -488,9 +510,8 @@
         const qtdDias = parseInt(document.getElementById("inputDias").value) || 1;
         const assinatura = document.getElementById("confirmacaoAssinatura").value.trim();
 
-        // VALIDAÇÃO DE SEGURANÇA
         if (assinatura !== prf) {
-            mostrarAlerta("ERRO DE VALIDAÇÃO: A assinatura não coincide com o nome do PRF selecionado. Você só pode alterar sua própria escala.");
+            mostrarAlerta("ERRO: Assinatura não coincide. Altere apenas sua própria escala.");
             fecharModal();
             return;
         }
@@ -507,11 +528,11 @@
             let aDia = String(dataLoop.getDate()).padStart(2, '0');
             let dataStringVerificacao = `${aAno}-${aMes}-${aDia}`;
 
-            const jaCadastrado = afastamentos.some(a => a.data === dataStringVerificacao && a.prf === prf);
-            const totalAfastadosNoDia = afastamentos.filter(a => a.data === dataStringVerificacao).length;
+            const jaCadastrado = aFaStAmEnToS_nUvEm.some(a => a.data === dataStringVerificacao && a.prf === prf);
+            const totalAfastadosNoDia = aFaStAmEnToS_nUvEm.filter(a => a.data === dataStringVerificacao).length;
 
             if (jaCadastrado) {
-                // Ignora duplicado
+                // Duplicado ignorado
             } else if (totalAfastadosNoDia >= 3) {
                 errosRegra.push(`${aDia}/${aMes}/${aAno}`);
             } else {
@@ -522,17 +543,15 @@
         }
 
         if (errosRegra.length > 0) {
-            mostrarAlerta(`AFASTAMENTO REJEITADO! O período solicitado viola o limite mínimo em serviço nas datas: ${errosRegra.join(', ')}.`);
+            mostrarAlerta(`REJEITADO! Viola o limite mínimo em serviço nas datas: ${errosRegra.join(', ')}.`);
             fecharModal();
             return;
         }
 
-        afastamentos = afastamentos.concat(novasDatasParaInserir);
-        
-        salvarNoLocalStorage();
+        aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.concat(novasDatasParaInserir);
+        salvarNaNuvem();
         fecharModal();
-        renderizarCalendario();
-        mostrarSucesso("Período publicado com sucesso!");
+        mostrarSucesso("Período atualizado na nuvem com sucesso!");
     }
 
     function mostrarAlerta(msg) {
