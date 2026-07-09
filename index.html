@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -225,7 +226,7 @@
         
         <div class="left-column" style="display: flex; flex-direction: column; gap: 20px;">
             <div class="panel">
-                <h3>1. Efetivo do Grupo (Max 6)</h3>
+                <h3>1. Efetivo do Grupo (Max 15)</h3>
                 <div class="input-group" style="display: flex; gap: 5px;">
                     <input type="text" id="inputNomePRF" placeholder="Nome do Policial (Ex: PRF Aldo)">
                     <button onclick="adicionarPRF()" style="width: auto;">+</button>
@@ -310,12 +311,11 @@
         databaseURL: "https://escala-prf-tatico-default-rtdb.firebaseio.com/"
     };
     
-    // Inicializa o Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // Estado Local do Aplicativo (Sincronizado com a nuvem)
-    let prfs = ["PRF Aldo", "PRF Batista", "PRF Carlos", "PRF Dias", "PRF Eduardo", "PRF Fernando"];
+    // Inicia vazio para a equipe preencher do zero na nuvem
+    let prfs = [];
     let aFaStAmEnToS_nUvEm = []; 
     
     let dataAtual = new Date();
@@ -324,15 +324,14 @@
 
     const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-    // ESCUTA EM TEMPO REAL: Toda vez que alguém mexer na nuvem, essa função roda sozinha em todos os celulares
+    // ESCUTA EM TEMPO REAL
     db.ref("escala_tatico").on("value", (snapshot) => {
         const dadosNuvem = snapshot.val();
         if (dadosNuvem) {
-            prfs = dadosNuvem.prfs || ["PRF Aldo", "PRF Batista", "PRF Carlos", "PRF Dias", "PRF Eduardo", "PRF Fernando"];
-            // Converte o objeto do Firebase de volta para array
+            prfs = dadosNuvem.prfs || [];
             aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos ? Object.values(dadosNuvem.afastamentos) : [];
         } else {
-            prfs = ["PRF Aldo", "PRF Batista", "PRF Carlos", "PRF Dias", "PRF Eduardo", "PRF Fernando"];
+            prfs = [];
             aFaStAmEnToS_nUvEm = [];
         }
         atualizarListaPRFs();
@@ -393,8 +392,14 @@
         const nome = input.value.trim();
         
         if (!nome) return;
-        if (prfs.length >= 6) {
-            mostrarAlerta("Limite máximo de 6 servidores atingido.");
+        // AJUSTADO: Limite estendido para 15 servidores
+        if (prfs.length >= 15) {
+            mostrarAlerta("Limite máximo de 15 servidores atingido.");
+            return;
+        }
+        
+        if (prfs.includes(nome)) {
+            mostrarAlerta("Este policial já está cadastrado.");
             return;
         }
         
