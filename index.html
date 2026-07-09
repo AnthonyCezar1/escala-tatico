@@ -218,7 +218,7 @@
 
 <div class="container">
     <h1>Calendário Operacional Nuvem - Tático PRF</h1>
-    <div class="sync-badge">🟢 Conectado em tempo real com a equipe</div>
+    <div id="statusConexao" class="sync-badge">⏳ Conectando à nuvem...</div>
     
     <div id="globalAlert" class="alert-banner"></div>
 
@@ -314,9 +314,9 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // Inicia vazio para a equipe preencher do zero na nuvem
     let prfs = [];
     let aFaStAmEnToS_nUvEm = []; 
+    let primeiraCargaRealizada = false;
     
     let dataAtual = new Date();
     let anoAtual = dataAtual.getFullYear();
@@ -324,16 +324,26 @@
 
     const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-    // ESCUTA EM TEMPO REAL
+    // ESCUTA EM TEMPO REAL COM TRAVA DE PRIMEIRA CARGA
     db.ref("escala_tatico").on("value", (snapshot) => {
         const dadosNuvem = snapshot.val();
+        
         if (dadosNuvem) {
             prfs = dadosNuvem.prfs || [];
             aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos ? Object.values(dadosNuvem.afastamentos) : [];
+            primeiraCargaRealizada = true;
         } else {
-            prfs = [];
-            aFaStAmEnToS_nUvEm = [];
+            // Se a nuvem estiver 100% vazia, só zera as variáveis locais na PRIMEIRA abertura
+            if (!primeiraCargaRealizada) {
+                prfs = [];
+                aFaStAmEnToS_nUvEm = [];
+                primeiraCargaRealizada = true;
+            }
         }
+        
+        document.getElementById("statusConexao").innerText = "🟢 Conectado em tempo real com a equipe";
+        document.getElementById("statusConexao").style.color = "#28a745";
+        
         atualizarListaPRFs();
         renderizarCalendario();
     });
@@ -342,6 +352,10 @@
         db.ref("escala_tatico").set({
             prfs: prfs,
             afastamentos: aFaStAmEnToS_nUvEm
+        }).then(() => {
+            console.log("Sincronizado com sucesso!");
+        }).catch((error) => {
+            mostrarAlerta("Erro ao salvar na nuvem: " + error.message);
         });
     }
 
@@ -392,7 +406,6 @@
         const nome = input.value.trim();
         
         if (!nome) return;
-        // AJUSTADO: Limite estendido para 15 servidores
         if (prfs.length >= 15) {
             mostrarAlerta("Limite máximo de 15 servidores atingido.");
             return;
@@ -405,6 +418,9 @@
         
         prfs.push(nome);
         input.value = "";
+        
+        // Renderiza localmente primeiro e força o envio definitivo para o banco
+        atualizarListaPRFs();
         salvarNaNuvem();
     }
 
@@ -417,6 +433,7 @@
         }
     }
 
+    // O restante das funções de renderização do calendário permanecem idênticas
     function renderizarCalendario() {
         document.getElementById("mesAnoTitulo").innerText = `${nomesMeses[mesAtual]} ${anoAtual}`;
         
@@ -566,6 +583,14 @@
         window.scrollTo({top: 0, behavior: 'smooth'});
         setTimeout(() => { banner.style.display = "none"; }, 8000);
     }
+
+    document.addEventListener('keydown', function(event) {
+        if (event.ctrlKey && event.key === 's') {
+            event.preventDefault();
+            salvarNaNuvem();
+            mostrarSucesso("💾 Forçado salvamento manual na nuvem!");
+        }
+    });
 
     function mostrarSucesso(msg) {
         const banner = document.getElementById("globalAlert");
