@@ -1,0 +1,558 @@
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendário Tático - PRF</title>
+    <style>
+        :root {
+            --prf-blue: #002244;
+            --prf-yellow: #ffcc00;
+            --text-dark: #333;
+            --bg-light: #f4f6f9;
+            --danger: #dc3545;
+            --success: #28a745;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-top: 8px solid var(--prf-blue);
+        }
+
+        h1, h2, h3 { color: var(--prf-blue); margin-top: 0; }
+        h1 { text-align: center; text-transform: uppercase; margin-bottom: 20px; font-size: 24px;}
+
+        .grid-main {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .grid-main { grid-template-columns: 1fr; }
+        }
+
+        .panel {
+            background: #fafafa;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            height: fit-content;
+        }
+
+        .input-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        input, select, button {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: var(--prf-blue);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+
+        button:hover { background-color: #001122; }
+        
+        button.btn-danger { background-color: var(--danger); }
+        button.btn-danger:hover { background-color: #bd2130; }
+        
+        button.btn-warning { background-color: #ffc107; color: #212529; }
+        button.btn-warning:hover { background-color: #e0a800; }
+
+        .chip-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0 0 0;
+        }
+
+        .chip {
+            display: flex;
+            justify-content: space-between;
+            background: #eee;
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            font-size: 13px;
+            align-items: center;
+        }
+
+        .chip button {
+            width: auto;
+            padding: 2px 6px;
+            font-size: 11px;
+        }
+
+        /* Estilos do Calendário */
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .calendar-header button { width: auto; padding: 5px 15px; }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+        }
+
+        .weekday {
+            text-align: center;
+            font-weight: bold;
+            background-color: var(--prf-blue);
+            color: white;
+            padding: 8px 0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .day-cell {
+            min-height: 95px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 4px;
+            padding: 5px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: background 0.2s;
+        }
+
+        .day-cell:hover { background: #f0f4f8; }
+        .day-cell.empty { background: #f9f9f9; cursor: default; }
+        .day-number { font-weight: bold; font-size: 14px; color: #555; }
+
+        .events-container {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-top: 5px;
+            overflow-y: auto;
+            max-height: 65px;
+        }
+
+        .event-badge {
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            color: white;
+            font-weight: bold;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+        }
+
+        .badge-folga { background-color: #fd7e14; }
+        .badge-ferias { background-color: #6f42c1; }
+
+        /* Modal Interno */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center; align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white; padding: 20px; border-radius: 8px;
+            width: 90%; max-width: 420px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .modal-buttons { display: flex; gap: 10px; margin-top: 15px; }
+        
+        .alert-banner {
+            padding: 12px; background: var(--danger); color: white;
+            border-radius: 4px; margin-bottom: 15px; font-weight: bold;
+            font-size: 13px; text-align: center; display: none;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Calendário Operacional - Grupo Tático</h1>
+    
+    <div id="globalAlert" class="alert-banner"></div>
+
+    <div class="grid-main">
+        
+        <div class="left-column" style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="panel">
+                <h3>1. Efetivo do Grupo (Max 6)</h3>
+                <div class="input-group" style="display: flex; gap: 5px;">
+                    <input type="text" id="inputNomePRF" placeholder="Nome do Policial (Ex: PRF Aldo)">
+                    <button onclick="adicionarPRF()" style="width: auto;">+</button>
+                </div>
+                <ul id="listaPRFs" class="chip-list"></ul>
+                
+                <div style="margin-top: 20px; display: flex; flex-direction: column; gap: 8px;">
+                    <button class="btn-warning" style="background-color: #e67e22; color: white;" onclick="resetarPRFEsquecido()">🧹 Limpar Escala de 1 PRF</button>
+                    <button class="btn-warning" onclick="resetarCalendarioApenas()">🔄 Limpar Todo o Calendário</button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Legenda de Afastamento</h3>
+                <div style="font-size: 13px; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 20px; height: 12px; background: #fd7e14; border-radius:3px;"></div> Folga / Licença
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 20px; height: 12px; background: #6f42c1; border-radius:3px;"></div> Férias Regulamentares
+                    </div>
+                    <strong style="color: var(--danger); margin-top: 5px; display: block;">* Máximo de 3 afastados por dia!</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" style="background: white;">
+            <div class="calendar-header">
+                <button onclick="mudarMes(-1)">&lt; Anterior</button>
+                <h2 id="mesAnoTitulo"></h2>
+                <button onclick="mudarMes(1)">Próximo &gt;</button>
+            </div>
+
+            <div class="calendar-grid" id="calendarioEstrutura">
+                <div class="weekday">Dom</div><div class="weekday">Seg</div><div class="weekday">Ter</div>
+                <div class="weekday">Qua</div><div class="weekday">Qui</div><div class="weekday">Sex</div><div class="weekday">Sáb</div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div id="modalAgendamento" class="modal">
+    <div class="modal-content">
+        <h3 id="modalTitulo">Lançar Período de Afastamento</h3>
+        <input type="hidden" id="modalData">
+        
+        <div class="input-group">
+            <label for="selectPRF">Selecione o seu Nome:</label>
+            <select id="selectPRF"></select>
+        </div>
+
+        <div class="input-group">
+            <label for="selectTipo">Tipo de Afastamento:</label>
+            <select id="selectTipo">
+                <option value="ferias">Férias</option>
+                <option value="folga">Folga / Licença</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label for="inputDias">Quantidade de Dias Consecutivos:</label>
+            <input type="number" id="inputDias" value="1" min="1" max="45">
+        </div>
+
+        <div class="input-group" style="background: #edf2f7; padding: 10px; border-radius: 4px;">
+            <label for="confirmacaoAssinatura" style="color: var(--prf-blue);">Assinatura de Validação:</label>
+            <input type="text" id="confirmacaoAssinatura" placeholder="Digite seu nome exatamente igual ao selecionado">
+            <small style="color: #555; font-size: 11px; display:block; margin-top:4px;">Segurança: Você só pode alterar o seu próprio calendário.</small>
+        </div>
+
+        <div class="modal-buttons">
+            <button onclick="salvarAfastamentoPeríodo()">Confirmar</button>
+            <button class="btn-danger" onclick="fecharModal()">Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const prfsPadrao = ["PRF Aldo", "PRF Batista", "PRF Carlos", "PRF Dias", "PRF Eduardo", "PRF Fernando"];
+    
+    let prfs = JSON.parse(localStorage.getItem('prfs_tatico')) || [...prfsPadrao];
+    let afastamentos = JSON.parse(localStorage.getItem('afastamentos_tatico')) || [];
+    
+    let dataAtual = new Date();
+    let anoAtual = dataAtual.getFullYear();
+    let mesAtual = dataAtual.getMonth();
+
+    const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+    window.onload = function() {
+        atualizarListaPRFs();
+        renderizarCalendario();
+    };
+
+    function salvarNoLocalStorage() {
+        localStorage.setItem('prfs_tatico', JSON.stringify(prfs));
+        localStorage.setItem('afastamentos_tatico', JSON.stringify(afastamentos));
+    }
+
+    // AJUSTE 1: RESET APENAS DO CALENDÁRIO (MANTÉM OS COLEGAS)
+    function resetarCalendarioApenas() {
+        if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas no calendário? Os nomes dos policiais cadastrados serão mantidos.")) {
+            afastamentos = [];
+            salvarNoLocalStorage();
+            renderizarCalendario();
+            mostrarSucesso("📅 Calendário de afastamentos totalmente limpo!");
+        }
+    }
+
+    // AJUSTE 2: APAGAR APENAS AS DATAS DE UM POLICIAL ESPECÍFICO
+    function resetarPRFEsquecido() {
+        const prfAlvo = prompt("Digite o nome EXATO do PRF que deseja limpar da escala:");
+        if (!prfAlvo) return;
+
+        if (!prfs.includes(prfAlvo)) {
+            mostrarAlerta("Policial não encontrado na lista atual do grupo.");
+            return;
+        }
+
+        if (confirm(`Deseja remover todos os lançamentos de folgas e férias do ${prfAlvo}?`)) {
+            afastamentos = afastamentos.filter(a => a.prf !== prfAlvo);
+            salvarNoLocalStorage();
+            renderizarCalendario();
+            mostrarSucesso(`🧹 Escala do ${prfAlvo} limpa com sucesso!`);
+        }
+    }
+
+    function atualizarListaPRFs() {
+        const lista = document.getElementById("listaPRFs");
+        const select = document.getElementById("selectPRF");
+        
+        lista.innerHTML = "";
+        select.innerHTML = "";
+
+        prfs.forEach((prf, index) => {
+            lista.innerHTML += `
+                <li class="chip">
+                    ${prf}
+                    <button class="btn-danger" onclick="removerPRF(${index})">X</button>
+                </li>`;
+            
+            select.innerHTML += `<option value="${prf}">${prf}</option>`;
+        });
+    }
+
+    function adicionarPRF() {
+        const input = document.getElementById("inputNomePRF");
+        const nome = input.value.trim();
+        
+        if (!nome) return;
+        if (prfs.length >= 6) {
+            mostrarAlerta("Limite máximo de 6 servidores atingido para este grupo.");
+            return;
+        }
+        
+        prfs.push(nome);
+        input.value = "";
+        atualizarListaPRFs();
+        salvarNoLocalStorage();
+        renderizarCalendario();
+    }
+
+    function removerPRF(index) {
+        const nomeRemovido = prfs[index];
+        if(confirm(`Deseja remover o ${nomeRemovido} do grupo e apagar suas escalas?`)) {
+            prfs.splice(index, 1);
+            afastamentos = afastamentos.filter(a => a.prf !== nomeRemovido);
+            atualizarListaPRFs();
+            salvarNoLocalStorage();
+            renderizarCalendario();
+        }
+    }
+
+    function renderizarCalendario() {
+        document.getElementById("mesAnoTitulo").innerText = `${nomesMeses[mesAtual]} ${anoAtual}`;
+        
+        const grid = document.getElementById("calendarioEstrutura");
+        const diasSemana = grid.querySelectorAll('.weekday');
+        grid.innerHTML = "";
+        diasSemana.forEach(d => grid.appendChild(d));
+
+        const primeiroDiaDoMes = new Date(anoAtual, mesAtual, 1).getDay();
+        const totalDiasNoMes = new Date(anoAtual, mesAtual + 1, 0).getDate();
+
+        for (let i = 0; i < primeiroDiaDoMes; i++) {
+            const emptyCell = document.createElement("div");
+            emptyCell.className = "day-cell empty";
+            grid.appendChild(emptyCell);
+        }
+
+        for (let dia = 1; dia <= totalDiasNoMes; dia++) {
+            const dataString = `${anoAtual}-${String(mesAtual + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+            
+            const cell = document.createElement("div");
+            cell.className = "day-cell";
+            cell.onclick = () => abrirModal(dataString);
+
+            const numDiv = document.createElement("div");
+            numDiv.className = "day-number";
+            numDiv.innerText = dia;
+            cell.appendChild(numDiv);
+
+            const eventsDiv = document.createElement("div");
+            eventsDiv.className = "events-container";
+
+            const listAfastados = afastamentos.filter(a => a.data === dataString);
+            listAfastados.forEach(afast => {
+                const badge = document.createElement("div");
+                badge.className = `event-badge badge-${afast.tipo}`;
+                badge.innerText = `${afast.prf} (${afast.tipo === 'folga' ? 'Folga' : 'Fér'})`;
+                eventsDiv.appendChild(badge);
+            });
+
+            cell.appendChild(eventsDiv);
+            grid.appendChild(cell);
+        }
+    }
+
+    function mudarMes(direcao) {
+        mesAtual += direcao;
+        if (mesAtual > 11) { mesAtual = 0; anoAtual++; }
+        if (mesAtual < 0) { mesAtual = 11; anoAtual--; }
+        renderizarCalendario();
+    }
+
+    function abrirModal(dataString) {
+        document.getElementById("modalData").value = dataString;
+        const [ano, mes, dia] = dataString.split("-");
+        document.getElementById("modalTitulo").innerText = `Iniciar afastamento em: ${dia}/${mes}/${ano}`;
+        document.getElementById("inputDias").value = "1";
+        document.getElementById("confirmacaoAssinatura").value = "";
+        
+        const doDia = afastamentos.filter(a => a.data === dataString);
+        if(doDia.length > 0) {
+            const nomesAfastados = doDia.map(a => a.prf).join(", ");
+            const assinaturaLimpar = prompt(`Afastados neste dia: ${nomesAfastados}.\nPara limpar os afastamentos deste dia, digite o nome do PRF cuja escala será removida:`);
+            
+            if(assinaturaLimpar) {
+                const inicialLength = afastamentos.length;
+                afastamentos = afastamentos.filter(a => !(a.data === dataString && a.prf === assinaturaLimpar));
+                if(afastamentos.length !== inicialLength) {
+                    salvarNoLocalStorage();
+                    renderizarCalendario();
+                    mostrarSucesso(`Escala do ${assinaturaLimpar} removida para este dia.`);
+                } else {
+                    title="Alerta";
+                    mostrarAlerta("Nome digitado não possuía afastamento nesta data.");
+                }
+                return;
+            }
+            if(assinaturaLimpar === "") return;
+        }
+
+        if (prfs.length === 0) {
+            mostrarAlerta("Adicione policiais na lista antes de agendar.");
+            return;
+        }
+
+        document.getElementById("modalAgendamento").style.display = "flex";
+    }
+
+    function fecharModal() {
+        document.getElementById("modalAgendamento").style.display = "none";
+    }
+
+    function salvarAfastamentoPeríodo() {
+        const dataInicialStr = document.getElementById("modalData").value;
+        const prf = document.getElementById("selectPRF").value;
+        const tipo = document.getElementById("selectTipo").value;
+        const qtdDias = parseInt(document.getElementById("inputDias").value) || 1;
+        const assinatura = document.getElementById("confirmacaoAssinatura").value.trim();
+
+        // VALIDAÇÃO DE SEGURANÇA
+        if (assinatura !== prf) {
+            mostrarAlerta("ERRO DE VALIDAÇÃO: A assinatura não coincide com o nome do PRF selecionado. Você só pode alterar sua própria escala.");
+            fecharModal();
+            return;
+        }
+
+        let errosRegra = [];
+        let novasDatasParaInserir = [];
+
+        const [ano, mes, dia] = dataInicialStr.split("-").map(Number);
+        let dataLoop = new Date(ano, mes - 1, dia);
+
+        for (let i = 0; i < qtdDias; i++) {
+            let aAno = dataLoop.getFullYear();
+            let aMes = String(dataLoop.getMonth() + 1).padStart(2, '0');
+            let aDia = String(dataLoop.getDate()).padStart(2, '0');
+            let dataStringVerificacao = `${aAno}-${aMes}-${aDia}`;
+
+            const jaCadastrado = afastamentos.some(a => a.data === dataStringVerificacao && a.prf === prf);
+            const totalAfastadosNoDia = afastamentos.filter(a => a.data === dataStringVerificacao).length;
+
+            if (jaCadastrado) {
+                // Ignora duplicado
+            } else if (totalAfastadosNoDia >= 3) {
+                errosRegra.push(`${aDia}/${aMes}/${aAno}`);
+            } else {
+                novasDatasParaInserir.push({ data: dataStringVerificacao, prf, tipo });
+            }
+
+            dataLoop.setDate(dataLoop.getDate() + 1);
+        }
+
+        if (errosRegra.length > 0) {
+            mostrarAlerta(`AFASTAMENTO REJEITADO! O período solicitado viola o limite mínimo em serviço nas datas: ${errosRegra.join(', ')}.`);
+            fecharModal();
+            return;
+        }
+
+        afastamentos = afastamentos.concat(novasDatasParaInserir);
+        
+        salvarNoLocalStorage();
+        fecharModal();
+        renderizarCalendario();
+        mostrarSucesso("Período publicado com sucesso!");
+    }
+
+    function mostrarAlerta(msg) {
+        const banner = document.getElementById("globalAlert");
+        banner.innerText = msg;
+        banner.style.backgroundColor = "var(--danger)";
+        banner.style.display = "block";
+        window.scrollTo({top: 0, behavior: 'smooth'});
+        setTimeout(() => { banner.style.display = "none"; }, 8000);
+    }
+
+    function mostrarSucesso(msg) {
+        const banner = document.getElementById("globalAlert");
+        banner.innerText = msg;
+        banner.style.backgroundColor = "var(--success)";
+        banner.style.display = "block";
+        window.scrollTo({top: 0, behavior: 'smooth'});
+        setTimeout(() => { banner.style.display = "none"; }, 5000);
+    }
+</script>
+
+</body>
+</html>
