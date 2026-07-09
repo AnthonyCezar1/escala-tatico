@@ -207,7 +207,7 @@
         }
         
         .sync-badge {
-            font-size: 11px; text-align: center; color: #28a745; font-weight: bold; margin-bottom: 10px;
+            font-size: 11px; text-align: center; color: #d35400; font-weight: bold; margin-bottom: 10px;
         }
     </style>
 </head>
@@ -215,7 +215,7 @@
 
 <div class="container">
     <h1>Calendário Operacional Tático - PRF</h1>
-    <div id="statusConexao" class="sync-badge">🟢 Sistema Operacional Ativo</div>
+    <div id="statusConexao" class="sync-badge">⏳ Conectando à nuvem global...</div>
     
     <div id="globalAlert" class="alert-banner"></div>
 
@@ -303,9 +303,12 @@
 </div>
 
 <script>
-    // Armazenamento local ultra-estável
-    let prfs = JSON.parse(localStorage.getItem('prf_efetivo')) || [];
-    let aFaStAmEnToS_nUvEm = JSON.parse(localStorage.getItem('prf_afastamentos')) || []; 
+    // Configuração de Nuvem Livre e Pronta (JSONBin.io)
+    const BIN_URL = "https://api.jsonbin.io/v3/b/668b19eeacd3cb34a86377ef";
+    const MASTER_KEY = "$2a$10$RzVbT90hN9M5VzreG/9Qe.Zq6mDWhs4D46.j/zO3XvA78Xk/T96q6"; // Acesso irrestrito de leitura/escrita público
+
+    let prfs = [];
+    let aFaStAmEnToS_nUvEm = []; 
     
     let dataAtual = new Date();
     let anoAtual = dataAtual.getFullYear();
@@ -313,31 +316,70 @@
 
     const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-    function salvarDados() {
-        localStorage.setItem('prf_efetivo', JSON.stringify(prfs));
-        localStorage.setItem('prf_afastamentos', JSON.stringify(aFaStAmEnToS_nUvEm));
-        atualizarListaPRFs();
-        renderizarCalendario();
-        mostrarSucesso("⚡ Alterações salvas com sucesso no dispositivo!");
+    // Baixa os dados da internet
+    function carregarDadosDaNuvem() {
+        fetch(BIN_URL, {
+            headers: { "X-Master-Key": MASTER_KEY }
+        })
+        .then(response => response.json())
+        .then(res => {
+            const dadosNuvem = res.record;
+            if (dadosNuvem) {
+                prfs = dadosNuvem.prfs || [];
+                aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos || [];
+            }
+            document.getElementById("statusConexao").innerText = "🟢 Sincronizado Online (Nuvem Ativa)";
+            document.getElementById("statusConexao").style.color = "#28a745";
+            atualizarListaPRFs();
+            renderizarCalendario();
+        })
+        .catch(() => {
+            document.getElementById("statusConexao").innerText = "🔴 Falha ao sincronizar com a nuvem";
+            document.getElementById("statusConexao").style.color = "#dc3545";
+        });
     }
 
+    // Envia os dados para a internet
+    function salvarNaNuvem() {
+        document.getElementById("statusConexao").innerText = "⏳ Atualizando nuvem global...";
+        document.getElementById("statusConexao").style.color = "#d35400";
+
+        fetch(BIN_URL, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Master-Key": MASTER_KEY
+            },
+            body: JSON.stringify({ prfs: prfs, afastamentos: aFaStAmEnToS_nUvEm })
+        })
+        .then(response => response.json())
+        .then(() => {
+            mostrarSucesso("⚡ Alteração publicada para toda a equipe!");
+            carregarDadosDaNuvem();
+        })
+        .catch(() => {
+            mostrarAlerta("Erro de rede ao salvar online.");
+        });
+    }
+
+    // Inicializa carregando do servidor e atualiza sozinho a cada 8 segundos
+    carregarDadosDaNuvem();
+    setInterval(carregarDadosDaNuvem, 8000);
+
     function resetarCalendarioApenas() {
-        if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas no calendário?")) {
+        if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas na nuvem por toda a equipe?")) {
             aFaStAmEnToS_nUvEm = [];
-            salvarDados();
+            salvarNaNuvem();
         }
     }
 
     function resetarPRFEsquecido() {
-        const prfAlvo = prompt("Digite o nome EXATO do PRF que deseja limpar da escala:");
+        const prfAlvo = prompt("Digite o nome EXATO do PRF que deseja limpar da escala na nuvem:");
         if (!prfAlvo) return;
-        if (!prfs.includes(prfAlvo)) {
-            mostrarAlerta("Policial não encontrado na lista.");
-            return;
-        }
+        if (!prfs.includes(prfAlvo)) { mostrarAlerta("Policial não encontrado."); return; }
         if (confirm(`Deseja remover todas as folgas/férias do ${prfAlvo}?`)) {
             aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => a.prf !== prfAlvo);
-            salvarDados();
+            salvarNaNuvem();
         }
     }
 
@@ -356,19 +398,19 @@
         const input = document.getElementById("inputNomePRF");
         const nome = input.value.trim();
         if (!nome) return;
-        if (prfs.length >= 15) { mostrarAlerta("Limite máximo de 15 servidores atingido."); return; }
-        if (prfs.includes(nome)) { mostrarAlerta("Este policial já está cadastrado."); return; }
+        if (prfs.length >= 15) { mostrarAlerta("Limite máximo atingido."); return; }
+        if (prfs.includes(nome)) { mostrarAlerta("Policial já cadastrado."); return; }
         prfs.push(nome);
         input.value = "";
-        salvarDados();
+        salvarNaNuvem();
     }
 
     function removerPRF(index) {
         const nomeRemovido = prfs[index];
-        if(confirm(`Remover ${nomeRemovido} e suas escalas?`)) {
+        if(confirm(`Remover ${nomeRemovido} de todos os celulares?`)) {
             prfs.splice(index, 1);
             aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => a.prf !== nomeRemovido);
-            salvarDados();
+            salvarNaNuvem();
         }
     }
 
@@ -435,7 +477,7 @@
             const assinaturaLimpar = prompt(`Afastados neste dia: ${nomesAfastados}.\nPara limpar, digite o nome do PRF cuja escala será removida:`);
             if(assinaturaLimpar) {
                 aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => !(a.data === dataString && a.prf === assinaturaLimpar));
-                salvarDados();
+                salvarNaNuvem();
                 return;
             }
         }
@@ -478,7 +520,7 @@
         if (errosRegra.length > 0) { mostrarAlerta(`REJEITADO! Limite de 3 ausências excedido em: ${errosRegra.join(', ')}.`); fecharModal(); return; }
 
         aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.concat(novasDatasParaInserir);
-        salvarDados();
+        salvarNaNuvem();
         fecharModal();
     }
 
@@ -493,10 +535,6 @@
         banner.innerText = msg; banner.style.backgroundColor = "var(--success)"; banner.style.display = "block";
         setTimeout(() => { banner.style.display = "none"; }, 3000);
     }
-
-    // Inicialização da interface
-    atualizarListaPRFs();
-    renderizarCalendario();
 </script>
 </body>
 </html>
