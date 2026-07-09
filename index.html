@@ -207,18 +207,15 @@
         }
         
         .sync-badge {
-            font-size: 11px; text-align: center; color: #d35400; font-weight: bold; margin-bottom: 10px;
+            font-size: 11px; text-align: center; color: #28a745; font-weight: bold; margin-bottom: 10px;
         }
     </style>
-
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
 <div class="container">
-    <h1>Calendário Operacional Nuvem - Tático PRF</h1>
-    <div id="statusConexao" class="sync-badge">⏳ Estabelecendo conexão segura com o Google...</div>
+    <h1>Calendário Operacional Tático - PRF</h1>
+    <div id="statusConexao" class="sync-badge">🟢 Sistema Operacional Ativo</div>
     
     <div id="globalAlert" class="alert-banner"></div>
 
@@ -306,11 +303,9 @@
 </div>
 
 <script>
-    // URL Direta do Banco de Dados de Testes (Sem necessidade de chaves complexas)
-    const DB_URL = "https://prf-tatico-escala-default-rtdb.firebaseio.com/dados_escala.json";
-
-    let prfs = [];
-    let aFaStAmEnToS_nUvEm = []; 
+    // Armazenamento local ultra-estável
+    let prfs = JSON.parse(localStorage.getItem('prf_efetivo')) || [];
+    let aFaStAmEnToS_nUvEm = JSON.parse(localStorage.getItem('prf_afastamentos')) || []; 
     
     let dataAtual = new Date();
     let anoAtual = dataAtual.getFullYear();
@@ -318,58 +313,23 @@
 
     const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-    // Função que CARREGA os dados do Google assim que o app abre
-    function carregarDadosDaNuvem() {
-        document.getElementById("statusConexao").innerText = "⏳ Atualizando dados com a nuvem...";
-        document.getElementById("statusConexao").style.color = "#d35400";
-
-        fetch(DB_URL)
-            .then(response => response.json())
-            .then(dadosNuvem => {
-                if (dadosNuvem) {
-                    prfs = dadosNuvem.prfs || [];
-                    aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos ? Object.values(dadosNuvem.afastamentos) : [];
-                }
-                document.getElementById("statusConexao").innerText = "🟢 Sincronizado em tempo real";
-                document.getElementById("statusConexao").style.color = "#28a745";
-                atualizarListaPRFs();
-                renderizarCalendario();
-            })
-            .catch(() => {
-                document.getElementById("statusConexao").innerText = "🔴 Erro de conexão com a nuvem";
-                document.getElementById("statusConexao").style.color = "#dc3545";
-            });
+    function salvarDados() {
+        localStorage.setItem('prf_efetivo', JSON.stringify(prfs));
+        localStorage.setItem('prf_afastamentos', JSON.stringify(aFaStAmEnToS_nUvEm));
+        atualizarListaPRFs();
+        renderizarCalendario();
+        mostrarSucesso("⚡ Alterações salvas com sucesso no dispositivo!");
     }
-
-    // Função que SALVA instantaneamente no Google
-    function salvarNaNuvem() {
-        fetch(DB_URL, {
-            method: "PUT",
-            body: JSON.stringify({ prfs: prfs, afastamentos: aFaStAmEnToS_nUvEm })
-        })
-        .then(() => {
-            mostrarSucesso("⚡ Salvo na nuvem com sucesso!");
-            carregarDadosDaNuvem(); // Recarrega para garantir sincronia
-        })
-        .catch(() => {
-            mostrarAlerta("Erro ao salvar! Verifique sua conexão de internet.");
-        });
-    }
-
-    // Carrega os dados na primeira abertura
-    carregarDadosDaNuvem();
-    // Atualiza automaticamente a cada 10 segundos caso outro policial mude algo
-    setInterval(carregarDadosDaNuvem, 10000);
 
     function resetarCalendarioApenas() {
-        if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas na nuvem por toda a equipe?")) {
+        if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas no calendário?")) {
             aFaStAmEnToS_nUvEm = [];
-            salvarNaNuvem();
+            salvarDados();
         }
     }
 
     function resetarPRFEsquecido() {
-        const prfAlvo = prompt("Digite o nome EXATO do PRF que deseja limpar da escala na nuvem:");
+        const prfAlvo = prompt("Digite o nome EXATO do PRF que deseja limpar da escala:");
         if (!prfAlvo) return;
         if (!prfs.includes(prfAlvo)) {
             mostrarAlerta("Policial não encontrado na lista.");
@@ -377,7 +337,7 @@
         }
         if (confirm(`Deseja remover todas as folgas/férias do ${prfAlvo}?`)) {
             aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => a.prf !== prfAlvo);
-            salvarNaNuvem();
+            salvarDados();
         }
     }
 
@@ -400,15 +360,15 @@
         if (prfs.includes(nome)) { mostrarAlerta("Este policial já está cadastrado."); return; }
         prfs.push(nome);
         input.value = "";
-        salvarNaNuvem();
+        salvarDados();
     }
 
     function removerPRF(index) {
         const nomeRemovido = prfs[index];
-        if(confirm(`Remover ${nomeRemovido} e suas escalas de todos os celulares?`)) {
+        if(confirm(`Remover ${nomeRemovido} e suas escalas?`)) {
             prfs.splice(index, 1);
             aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => a.prf !== nomeRemovido);
-            salvarNaNuvem();
+            salvarDados();
         }
     }
 
@@ -475,7 +435,7 @@
             const assinaturaLimpar = prompt(`Afastados neste dia: ${nomesAfastados}.\nPara limpar, digite o nome do PRF cuja escala será removida:`);
             if(assinaturaLimpar) {
                 aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => !(a.data === dataString && a.prf === assinaturaLimpar));
-                salvarNaNuvem();
+                salvarDados();
                 return;
             }
         }
@@ -518,7 +478,7 @@
         if (errosRegra.length > 0) { mostrarAlerta(`REJEITADO! Limite de 3 ausências excedido em: ${errosRegra.join(', ')}.`); fecharModal(); return; }
 
         aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.concat(novasDatasParaInserir);
-        salvarNaNuvem();
+        salvarDados();
         fecharModal();
     }
 
@@ -533,7 +493,10 @@
         banner.innerText = msg; banner.style.backgroundColor = "var(--success)"; banner.style.display = "block";
         setTimeout(() => { banner.style.display = "none"; }, 3000);
     }
-</script>
 
+    // Inicialização da interface
+    atualizarListaPRFs();
+    renderizarCalendario();
+</script>
 </body>
 </html>
