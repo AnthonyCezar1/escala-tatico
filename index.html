@@ -215,7 +215,7 @@
 
 <div class="container">
     <h1>Calendário Operacional Tático - PRF</h1>
-    <div id="statusConexao" class="sync-badge">⏳ Conectando à nuvem global...</div>
+    <div id="statusConexao" class="sync-badge">⏳ Conectando à sua nuvem PRF...</div>
     
     <div id="globalAlert" class="alert-banner"></div>
 
@@ -303,9 +303,8 @@
 </div>
 
 <script>
-    // Configuração de Nuvem Livre e Pronta (JSONBin.io)
-    const BIN_URL = "https://api.jsonbin.io/v3/b/668b19eeacd3cb34a86377ef";
-    const MASTER_KEY = "$2a$10$RzVbT90hN9M5VzreG/9Qe.Zq6mDWhs4D46.j/zO3XvA78Xk/T96q6"; // Acesso irrestrito de leitura/escrita público
+    // ⚠️ ATENÇÃO: SUBSTITUA O LINK ABAIXO PELO SEU LINK DO FIREBASE (MANTENHA O '/escala.json' NO FINAL)
+    const BANCO_URL = "https://escala-tatica-prf-default-rtdb.firebaseio.com/escala.json";
 
     let prfs = [];
     let aFaStAmEnToS_nUvEm = []; 
@@ -316,55 +315,45 @@
 
     const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-    // Baixa os dados da internet
     function carregarDadosDaNuvem() {
-        fetch(BIN_URL, {
-            headers: { "X-Master-Key": MASTER_KEY }
-        })
-        .then(response => response.json())
-        .then(res => {
-            const dadosNuvem = res.record;
-            if (dadosNuvem) {
-                prfs = dadosNuvem.prfs || [];
-                aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos || [];
-            }
-            document.getElementById("statusConexao").innerText = "🟢 Sincronizado Online (Nuvem Ativa)";
-            document.getElementById("statusConexao").style.color = "#28a745";
-            atualizarListaPRFs();
-            renderizarCalendario();
-        })
-        .catch(() => {
-            document.getElementById("statusConexao").innerText = "🔴 Falha ao sincronizar com a nuvem";
-            document.getElementById("statusConexao").style.color = "#dc3545";
-        });
+        fetch(BANCO_URL)
+            .then(response => response.json())
+            .then(dadosNuvem => {
+                if (dadosNuvem) {
+                    prfs = dadosNuvem.prfs || [];
+                    aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos || [];
+                }
+                document.getElementById("statusConexao").innerText = "🟢 Conectado ao Firebase Privado";
+                document.getElementById("statusConexao").style.color = "#28a745";
+                atualizarListaPRFs();
+                renderizarCalendario();
+            })
+            .catch(() => {
+                document.getElementById("statusConexao").innerText = "🔴 Falha de Conexão com o Firebase";
+                document.getElementById("statusConexao").style.color = "#dc3545";
+            });
     }
 
-    // Envia os dados para a internet
     function salvarNaNuvem() {
-        document.getElementById("statusConexao").innerText = "⏳ Atualizando nuvem global...";
+        document.getElementById("statusConexao").innerText = "⏳ Sincronizando com o Google...";
         document.getElementById("statusConexao").style.color = "#d35400";
 
-        fetch(BIN_URL, {
+        fetch(BANCO_URL, {
             method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Master-Key": MASTER_KEY
-            },
             body: JSON.stringify({ prfs: prfs, afastamentos: aFaStAmEnToS_nUvEm })
         })
-        .then(response => response.json())
         .then(() => {
-            mostrarSucesso("⚡ Alteração publicada para toda a equipe!");
+            mostrarSucesso("⚡ Escala atualizada na nuvem!");
             carregarDadosDaNuvem();
         })
         .catch(() => {
-            mostrarAlerta("Erro de rede ao salvar online.");
+            mostrarAlerta("Erro ao salvar! Verifique as regras do seu Firebase.");
         });
     }
 
-    // Inicializa carregando do servidor e atualiza sozinho a cada 8 segundos
+    // Carrega e atualiza a cada 5 segundos automaticamente
     carregarDadosDaNuvem();
-    setInterval(carregarDadosDaNuvem, 8000);
+    setInterval(carregarDadosDaNuvem, 5000);
 
     function resetarCalendarioApenas() {
         if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas na nuvem por toda a equipe?")) {
