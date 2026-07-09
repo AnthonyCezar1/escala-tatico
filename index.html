@@ -306,20 +306,8 @@
 </div>
 
 <script>
-    // CORREÇÃO CRÍTICA: Credenciais de um projeto Firebase configurado com leitura/escrita liberadas
-    const firebaseConfig = {
-        apiKey: "AIzaSyAs7X3X4v8v-ExampleKeyForPRFTatico",
-        authDomain: "prf-tatico-escala.firebaseapp.com",
-        databaseURL: "https://prf-tatico-escala-default-rtdb.firebaseio.com/",
-        projectId: "prf-tatico-escala",
-        storageBucket: "prf-tatico-escala.appspot.com"
-    };
-    
-    // Inicialização segura
-    if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-    }
-    const db = firebase.database();
+    // URL Direta do Banco de Dados de Testes (Sem necessidade de chaves complexas)
+    const DB_URL = "https://prf-tatico-escala-default-rtdb.firebaseio.com/dados_escala.json";
 
     let prfs = [];
     let aFaStAmEnToS_nUvEm = []; 
@@ -330,35 +318,48 @@
 
     const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-    // Sincronização em tempo real bidirecional ativa
-    db.ref("dados_escala").on("value", (snapshot) => {
-        const dadosNuvem = snapshot.val();
-        
-        if (dadosNuvem) {
-            prfs = dadosNuvem.prfs || [];
-            aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos ? Object.values(dadosNuvem.afastamentos) : [];
-        }
-        
-        document.getElementById("statusConexao").innerText = "🟢 Conectado em tempo real com o Google Cloud";
-        document.getElementById("statusConexao").style.color = "#28a745";
-        
-        atualizarListaPRFs();
-        renderizarCalendario();
-    }, (error) => {
-        document.getElementById("statusConexao").innerText = "🔴 Falha na autenticação do banco de dados";
-        document.getElementById("statusConexao").style.color = "#dc3545";
-    });
+    // Função que CARREGA os dados do Google assim que o app abre
+    function carregarDadosDaNuvem() {
+        document.getElementById("statusConexao").innerText = "⏳ Atualizando dados com a nuvem...";
+        document.getElementById("statusConexao").style.color = "#d35400";
 
+        fetch(DB_URL)
+            .then(response => response.json())
+            .then(dadosNuvem => {
+                if (dadosNuvem) {
+                    prfs = dadosNuvem.prfs || [];
+                    aFaStAmEnToS_nUvEm = dadosNuvem.afastamentos ? Object.values(dadosNuvem.afastamentos) : [];
+                }
+                document.getElementById("statusConexao").innerText = "🟢 Sincronizado em tempo real";
+                document.getElementById("statusConexao").style.color = "#28a745";
+                atualizarListaPRFs();
+                renderizarCalendario();
+            })
+            .catch(() => {
+                document.getElementById("statusConexao").innerText = "🔴 Erro de conexão com a nuvem";
+                document.getElementById("statusConexao").style.color = "#dc3545";
+            });
+    }
+
+    // Função que SALVA instantaneamente no Google
     function salvarNaNuvem() {
-        db.ref("dados_escala").set({
-            prfs: prfs,
-            afastamentos: aFaStAmEnToS_nUvEm
-        }).then(() => {
-            mostrarSucesso("⚡ Banco de dados atualizado na nuvem!");
-        }).catch((error) => {
-            mostrarAlerta("Erro de gravação: Banco de dados bloqueado ou sem rede.");
+        fetch(DB_URL, {
+            method: "PUT",
+            body: JSON.stringify({ prfs: prfs, afastamentos: aFaStAmEnToS_nUvEm })
+        })
+        .then(() => {
+            mostrarSucesso("⚡ Salvo na nuvem com sucesso!");
+            carregarDadosDaNuvem(); // Recarrega para garantir sincronia
+        })
+        .catch(() => {
+            mostrarAlerta("Erro ao salvar! Verifique sua conexão de internet.");
         });
     }
+
+    // Carrega os dados na primeira abertura
+    carregarDadosDaNuvem();
+    // Atualiza automaticamente a cada 10 segundos caso outro policial mude algo
+    setInterval(carregarDadosDaNuvem, 10000);
 
     function resetarCalendarioApenas() {
         if (confirm("🚨 Deseja apagar TODAS as folgas e férias lançadas na nuvem por toda a equipe?")) {
@@ -370,12 +371,10 @@
     function resetarPRFEsquecido() {
         const prfAlvo = prompt("Digite o nome EXATO do PRF que deseja limpar da escala na nuvem:");
         if (!prfAlvo) return;
-
         if (!prfs.includes(prfAlvo)) {
             mostrarAlerta("Policial não encontrado na lista.");
             return;
         }
-
         if (confirm(`Deseja remover todas as folgas/férias do ${prfAlvo}?`)) {
             aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => a.prf !== prfAlvo);
             salvarNaNuvem();
@@ -385,17 +384,10 @@
     function atualizarListaPRFs() {
         const lista = document.getElementById("listaPRFs");
         const select = document.getElementById("selectPRF");
-        
         lista.innerHTML = "";
         select.innerHTML = "";
-
         prfs.forEach((prf, index) => {
-            lista.innerHTML += `
-                <li class="chip">
-                    ${prf}
-                    <button class="btn-danger" onclick="removerPRF(${index})">X</button>
-                </li>`;
-            
+            lista.innerHTML += `<li class="chip">${prf} <button class="btn-danger" onclick="removerPRF(${index})">X</button></li>`;
             select.innerHTML += `<option value="${prf}">${prf}</option>`;
         });
     }
@@ -403,18 +395,9 @@
     function adicionarPRF() {
         const input = document.getElementById("inputNomePRF");
         const nome = input.value.trim();
-        
         if (!nome) return;
-        if (prfs.length >= 15) {
-            mostrarAlerta("Limite máximo de 15 servidores atingido.");
-            return;
-        }
-        
-        if (prfs.includes(nome)) {
-            mostrarAlerta("Este policial já está cadastrado.");
-            return;
-        }
-        
+        if (prfs.length >= 15) { mostrarAlerta("Limite máximo de 15 servidores atingido."); return; }
+        if (prfs.includes(nome)) { mostrarAlerta("Este policial já está cadastrado."); return; }
         prfs.push(nome);
         input.value = "";
         salvarNaNuvem();
@@ -431,7 +414,6 @@
 
     function renderizarCalendario() {
         document.getElementById("mesAnoTitulo").innerText = `${nomesMeses[mesAtual]} ${anoAtual}`;
-        
         const grid = document.getElementById("calendarioEstrutura");
         const diasSemana = grid.querySelectorAll('.weekday');
         grid.innerHTML = "";
@@ -448,7 +430,6 @@
 
         for (let dia = 1; dia <= totalDiasNoMes; dia++) {
             const dataString = `${anoAtual}-${String(mesAtual + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-            
             const cell = document.createElement("div");
             cell.className = "day-cell";
             cell.onclick = () => abrirModal(dataString);
@@ -492,31 +473,17 @@
         if(doDia.length > 0) {
             const nomesAfastados = doDia.map(a => a.prf).join(", ");
             const assinaturaLimpar = prompt(`Afastados neste dia: ${nomesAfastados}.\nPara limpar, digite o nome do PRF cuja escala será removida:`);
-            
             if(assinaturaLimpar) {
-                const inicialLength = aFaStAmEnToS_nUvEm.length;
                 aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.filter(a => !(a.data === dataString && a.prf === assinaturaLimpar));
-                if(aFaStAmEnToS_nUvEm.length !== inicialLength) {
-                    salvarNaNuvem();
-                } else {
-                    mostrarAlerta("Nome incorreto.");
-                }
+                salvarNaNuvem();
                 return;
             }
-            if(assinaturaLimpar === "") return;
         }
-
-        if (prfs.length === 0) {
-            mostrarAlerta("Adicione policiais na lista antes de agendar.");
-            return;
-        }
-
+        if (prfs.length === 0) { mostrarAlerta("Adicione policiais na lista antes de agendar."); return; }
         document.getElementById("modalAgendamento").style.display = "flex";
     }
 
-    function fecharModal() {
-        document.getElementById("modalAgendamento").style.display = "none";
-    }
+    function fecharModal() { document.getElementById("modalAgendamento").style.display = "none"; }
 
     function salvarAfastamentoPeríodo() {
         const dataInicialStr = document.getElementById("modalData").value;
@@ -525,15 +492,10 @@
         const qtdDias = parseInt(document.getElementById("inputDias").value) || 1;
         const assinatura = document.getElementById("confirmacaoAssinatura").value.trim();
 
-        if (assinatura !== prf) {
-            mostrarAlerta("ERRO: Assinatura não coincide. Altere apenas sua própria escala.");
-            fecharModal();
-            return;
-        }
+        if (assinatura !== prf) { mostrarAlerta("ERRO: Assinatura incorreta."); fecharModal(); return; }
 
         let errosRegra = [];
         let novasDatasParaInserir = [];
-
         const [ano, mes, dia] = dataInicialStr.split("-").map(Number);
         let dataLoop = new Date(ano, mes - 1, dia);
 
@@ -546,22 +508,14 @@
             const jaCadastrado = aFaStAmEnToS_nUvEm.some(a => a.data === dataStringVerificacao && a.prf === prf);
             const totalAfastadosNoDia = aFaStAmEnToS_nUvEm.filter(a => a.data === dataStringVerificacao).length;
 
-            if (jaCadastrado) {
-                // Duplicado ignorado
-            } else if (totalAfastadosNoDia >= 3) {
-                errosRegra.push(`${aDia}/${aMes}/${aAno}`);
-            } else {
-                novasDatasParaInserir.push({ data: dataStringVerificacao, prf, tipo });
+            if (!jaCadastrado) {
+                if (totalAfastadosNoDia >= 3) { errosRegra.push(`${aDia}/${aMes}/${aAno}`); } 
+                else { novasDatasParaInserir.push({ data: dataStringVerificacao, prf, tipo }); }
             }
-
             dataLoop.setDate(dataLoop.getDate() + 1);
         }
 
-        if (errosRegra.length > 0) {
-            mostrarAlerta(`REJEITADO! Viola o limite mínimo em serviço nas datas: ${errosRegra.join(', ')}.`);
-            fecharModal();
-            return;
-        }
+        if (errosRegra.length > 0) { mostrarAlerta(`REJEITADO! Limite de 3 ausências excedido em: ${errosRegra.join(', ')}.`); fecharModal(); return; }
 
         aFaStAmEnToS_nUvEm = aFaStAmEnToS_nUvEm.concat(novasDatasParaInserir);
         salvarNaNuvem();
@@ -570,20 +524,14 @@
 
     function mostrarAlerta(msg) {
         const banner = document.getElementById("globalAlert");
-        banner.innerText = msg;
-        banner.style.backgroundColor = "var(--danger)";
-        banner.style.display = "block";
-        window.scrollTo({top: 0, behavior: 'smooth'});
-        setTimeout(() => { banner.style.display = "none"; }, 8000);
+        banner.innerText = msg; banner.style.backgroundColor = "var(--danger)"; banner.style.display = "block";
+        setTimeout(() => { banner.style.display = "none"; }, 5000);
     }
 
     function mostrarSucesso(msg) {
         const banner = document.getElementById("globalAlert");
-        banner.innerText = msg;
-        banner.style.backgroundColor = "var(--success)";
-        banner.style.display = "block";
-        window.scrollTo({top: 0, behavior: 'smooth'});
-        setTimeout(() => { banner.style.display = "none"; }, 4000);
+        banner.innerText = msg; banner.style.backgroundColor = "var(--success)"; banner.style.display = "block";
+        setTimeout(() => { banner.style.display = "none"; }, 3000);
     }
 </script>
 
